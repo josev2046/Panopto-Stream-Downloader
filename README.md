@@ -1,98 +1,148 @@
 # Panopto Stream Downloader
 
-A lightweight shell utility for downloading Panopto sessions as MP4 files.
+A lightweight, zero-auth shell utility for downloading Panopto sessions as MP4 files by bypassing the official API.
+
+---
 
 ## The Problem
 
-Standard Panopto API methods such as `GetVideoDownloadURL` (SOAP) and `deliveryInfo` (REST) frequently return empty results when:
+Standard Panopto API methods — such as `GetVideoDownloadURL` (SOAP) and `deliveryInfo` (REST) — frequently return empty results or 404s when:
 
-- The "Podcast" output is not explicitly enabled on the session.
-- The API user does not hold "Creator" permissions on the target folder.
+- The **Podcast** output is not explicitly enabled on the session.
+- The API user does not hold **Creator** permissions on the target folder.
 - Site-wide download settings are restrictive.
+
+---
 
 ## The Approach
 
-<img width="619" height="759" alt="image" src="https://github.com/user-attachments/assets/fde76165-f0eb-4fa9-ab0d-11539ec641fd" />
+This script bypasses the Management API entirely by querying the **Viewer Delivery Engine** directly. By simulating an anonymous request to the embedded web player, it retrieves the internal HLS stream path and converts it to a progressive MP4 download URL.
 
+> **Note:** Because this method mimics a public-facing embed player, no API credentials, OAuth tokens, or UserKeys are required. Only the `deliveryId` (Session ID) is needed, keeping the script fast and clean.
 
-This script bypasses the Management API entirely by querying the **Viewer Delivery Engine** directly. It retrieves the internal HLS stream path used by the web player and converts it to a progressive MP4 download URL.
-
-Note: because this method targets the public-facing viewer engine, no `UserKey` or `Password` (`AuthenticationInfo` in SOAP terms) is required. Only the `deliveryId` (Session ID) is needed, which keeps things considerably cleaner.
+---
 
 ## Features
 
-- Authenticates via OAuth2 (Client Credentials).
-- Queries `DeliveryInfo.aspx` to locate internal stream paths.
-- Automatically converts `.m3u8` HLS paths to direct `.mp4` download URLs.
-- Processes multiple Session IDs in a single run.
+| Feature | Detail |
+|---|---|
+| **Zero Authentication** | No API clients or OAuth2 tokens required |
+| **Internal Extraction** | Queries `DeliveryInfo.aspx` to locate hidden stream paths |
+| **Automatic Conversion** | Converts fragmented `.m3u8` HLS paths to direct `.mp4` download URLs |
+| **Batch Processing** | Downloads multiple Session IDs sequentially in a single run |
+
+---
 
 ## Prerequisites
 
-- **Panopto API Client** — must be created as a **Server Application**.
-- **Tools** — `curl`, `sed`, and either `zsh` or `bash`.
+The following tools must be available on your system — both are native to macOS and Linux:
+
+- `curl`
+- `sed`
+- `zsh` or `bash`
+
+---
 
 ## Usage
 
-1. Clone the repository.
-2. Edit the variables at the top of `download.sh`.
-3. Run the script:
+1. **Clone the repository:**
+
+   ```bash
+   git clone https://github.com/your-org/panopto-stream-downloader.git
+   cd panopto-stream-downloader
+   ```
+
+2. **Edit the configuration** in `download.sh`:
+   - Set `HOST` to your organisation's Panopto domain.
+   - Populate the `SESSIONS` array with the Session IDs you wish to download.
+
+3. **Run the script:**
+
+   ```bash
+   chmod +x download.sh
+   ./download.sh
+   ```
+
+---
+
+## Script
 
 ```bash
-chmod +x download.sh
-./download.sh
-```
-
-## `download.sh`
-
-```zsh
 #!/bin/zsh
 
 # --- Configuration ---
-PANOPTO_HOST="your-org.cloud.panopto.eu"
-CLIENT_ID="your-client-id"
-CLIENT_SECRET="your-client-secret"
+HOST="your-org.cloud.panopto.eu"
 
 # Session IDs to download
-SESSION_IDS=(
+SESSIONS=(
   "id-1"
   "id-2"
 )
 
-# --- Authentication ---
-echo "Authenticating with $PANOPTO_HOST..."
-TOKEN=$(curl -s -X POST "https://$PANOPTO_HOST/Panopto/oauth2/connect/token" \
-  -d "grant_type=client_credentials" \
-  -d "client_id=$CLIENT_ID" \
-  -d "client_secret=$CLIENT_SECRET" \
-  -d "scope=api" | sed -E 's/.*"access_token":"([^"]+)".*/\1/')
-
-if [[ -z "$TOKEN" || "$TOKEN" == *"error"* ]]; then
-  echo "Authentication failed. Check CLIENT_ID and CLIENT_SECRET."
-  exit 1
-fi
-
 # --- Processing ---
-for id in "${SESSION_IDS[@]}"; do
+echo "🚀 Starting Panopto extraction..."
+
+for id in "${SESSIONS[@]}"; do
   echo "--- Processing: $id ---"
 
-  # Query the Viewer Delivery Engine for the internal stream URL
-  RAW_PATH=$(curl -s -X POST "https://$PANOPTO_HOST/Panopto/Pages/Viewer/DeliveryInfo.aspx" \
+  # 1. Fetch DeliveryInfo JSON exactly as the web player does (no auth required)
+  RAW_JSON=$(curl -s -X POST "https://$HOST/Panopto/Pages/Viewer/DeliveryInfo.aspx" \
     -d "deliveryId=$id" \
     -d "isEmbed=true" \
-    -d "responseType=json" \
-    | sed -E 's/.*"StreamUrl":"([^"]+)".*/\1/' | sed 's/\\//g')
+    -d "responseType=json")
 
-  # Convert HLS manifest path to a direct MP4 URL
-  # Panopto storage convention: .hls/master.m3u8 -> .mp4
-  MP4_URL=$(echo "$RAW_PATH" | sed 's/\.hls\/master\.m3u8/\.mp4/')
+  # 2. Extract the StreamUrl, clean escape characters, and swap .m3u8 for .mp4
+  #    Panopto storage convention: .hls/master.m3u8 → .mp4
+  STREAM_URL=$(echo "$RAW_JSON" \
+    | sed -E 's/.*"StreamUrl":"([^"]+)".*/\1/' \
+    | sed 's/\\//g' \
+    | sed 's/\.hls\/master\.m3u8/\.mp4/')
 
-  if [[ $MP4_URL == http* ]]; then
-    echo "Stream resolved. Downloading..."
-    curl -# -L "$MP4_URL" -o "video_$id.mp4"
+  # 3. Download the file
+  if [[ $STREAM_URL == http* ]]; then
+    echo "✅ Direct MP4 found. Downloading..."
+    curl --progress-bar -L "$STREAM_URL" -o "video_$id.mp4"
   else
-    echo "Error: could not resolve stream for session $id."
+    echo "❌ Stream blocked or not found. Ensure the video is publicly accessible or shared via link."
   fi
 done
 
-echo "Done."
+echo "🎉 Batch download complete!"
 ```
+
+---
+
+## How It Works
+
+```
+Session ID (deliveryId)
+        │
+        ▼
+POST /Panopto/Pages/Viewer/DeliveryInfo.aspx
+   isEmbed=true  |  responseType=json
+        │
+        ▼
+  Parse "StreamUrl" from JSON response
+        │
+        ▼
+  .hls/master.m3u8  →  .mp4
+        │
+        ▼
+  curl download → video_<id>.mp4
+```
+
+---
+
+## Troubleshooting
+
+**`❌ Stream blocked or not found`**
+The session may be restricted to authenticated viewers only. Verify the video is accessible via a shared or public link before running the script.
+
+**Partial or corrupt downloads**
+Re-run the script for the affected Session ID. Panopto's CDN occasionally throttles large files.
+
+---
+
+## Licence
+
+MIT
