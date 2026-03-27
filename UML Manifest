@@ -1,0 +1,46 @@
+@startuml panopto-stream-downloader
+
+skinparam sequenceArrowThickness 1.2
+skinparam sequenceParticipantBorderThickness 0.8
+skinparam roundcorner 6
+skinparam monochrome false
+
+participant "Script"            as S
+participant "OAuth2 endpoint"   as O
+participant "DeliveryInfo.aspx" as D
+participant "MP4 storage"       as M
+
+== Authentication ==
+
+S -> O : POST /oauth2/connect/token\n(client_credentials)
+O --> S : access_token
+
+alt auth failed
+    S -> S : echo "Authentication failed." \n exit 1
+end
+
+== Per session ID ==
+
+loop for each SESSION_ID
+
+    S -> D : POST DeliveryInfo.aspx\n(deliveryId, isEmbed=true, responseType=json)
+    D --> S : JSON — StreamUrl (.m3u8 path)
+
+    S -> S : sed: .hls/master.m3u8 → .mp4
+
+    alt URL not resolved
+        S -> S : log error, skip session
+    end
+
+    S -> M : GET {mp4_url}\n(curl -L, follow redirects)
+    M --> S : MP4 byte stream
+
+    S -> S : write video_{id}.mp4
+
+end
+
+== Complete ==
+
+S -> S : echo "Done."
+
+@enduml
