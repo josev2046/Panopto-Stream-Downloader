@@ -1,5 +1,7 @@
 # Panopto Stream Downloader
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19265501.svg)](https://doi.org/10.5281/zenodo.19265501)
+
 A lightweight, zero-auth shell utility for downloading Panopto sessions as MP4 files by bypassing the official API.
 
 ---
