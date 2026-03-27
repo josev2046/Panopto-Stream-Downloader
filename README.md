@@ -18,6 +18,9 @@ Standard Panopto API methods — such as `GetVideoDownloadURL` (SOAP) and `deliv
 
 This script bypasses the Management API entirely by querying the **Viewer Delivery Engine** directly. By simulating an anonymous request to the embedded web player, it retrieves the internal HLS stream path and converts it to a progressive MP4 download URL.
 
+<img width="600" height="604" alt="image" src="https://github.com/user-attachments/assets/588e4f9d-9233-40ed-ac89-bb7d0aa904a9" />
+
+
 > **Note:** Because this method mimics a public-facing embed player, no API credentials, OAuth tokens, or UserKeys are required. Only the `deliveryId` (Session ID) is needed, keeping the script fast and clean.
 
 ---
