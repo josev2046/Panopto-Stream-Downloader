@@ -6,7 +6,7 @@ A lightweight, zero-auth shell utility for downloading Panopto sessions as MP4 f
 
 ---
 
-## The Problem
+## The problem
 
 Standard Panopto API methods — such as `GetVideoDownloadURL` (SOAP) and `deliveryInfo` (REST) — frequently return empty results or 404s when:
 
@@ -16,7 +16,7 @@ Standard Panopto API methods — such as `GetVideoDownloadURL` (SOAP) and `deliv
 
 ---
 
-## The Approach
+## The approach
 
 This script bypasses the Management API entirely by querying the **Viewer Delivery Engine** directly. By simulating an anonymous request to the embedded web player, it retrieves the internal HLS stream path and converts it to a progressive MP4 download URL.
 
@@ -117,7 +117,7 @@ echo "🎉 Batch download complete!"
 
 ---
 
-## How It Works
+## How it works
 
 ```
 Session ID (deliveryId)
