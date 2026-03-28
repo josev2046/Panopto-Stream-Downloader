@@ -146,8 +146,3 @@ The session may be restricted to authenticated viewers only. Verify the video is
 **Partial or corrupt downloads**
 Re-run the script for the affected Session ID. Panopto's CDN occasionally throttles large files.
 
----
-
-## Licence
-
-MIT
